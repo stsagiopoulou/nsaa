@@ -8,6 +8,39 @@ const fortune = require('fortune-teller');
 const extractJwt = require('passport-jwt').ExtractJwt;
 const jwtStrategy = require('passport-jwt').Strategy;
 const crypto = require('crypto');
+const argon2 = require("argon2");
+const fs = require('fs');
+
+const fastOptions = {
+  timeCost: 2,  
+  memoryCost: 1024,  
+  parallelism: 2,  
+  type: argon2.argon2i,  
+  hashLength: 32, 
+};
+
+// Configure the options for the slow hash
+const slowOptions = {
+  timeCost: 4,  
+  memoryCost: 65536,
+  parallelism: 8,
+  type: argon2.argon2id,
+  hashLength: 64,
+};
+
+
+async function hashAndStorePassword(password) {
+  const hashfast = await argon2.hash(password, fastOptions);
+  console.log(`Hash Fast: ${hashfast}`);
+  fs.writeFileSync("hash.txt", hashfast);
+
+  const hashslow = await argon2.hash(password, slowOptions);
+  console.log(`Hash Slow: ${hashslow}`);
+  fs.writeFileSync("hash.txt", hashslow);
+
+}
+
+hashAndStorePassword("walrus");
 
 const jwtSecret = 'mykeeeyyyy'
 const adages = [
@@ -31,17 +64,22 @@ passport.use('username-password', new LocalStrategy(
     passwordField: 'password',
     session: false
   },
-  function (username, password, done) {
+   async function (username, password, done) {
     if (username === 'walrus' && password === 'walrus') {
-      const user = { 
-        username: 'walrus',
-        description: 'the only user that deserves to contact the fortune teller'
-      }
+      const hash = await fs.promises.readFile('hash.txt', 'utf-8');
+      const correct = await argon2.verify(hash, password);
+      if (correct) {
+        const user = { 
+          username: 'walrus',
+          description: 'the only user that deserves to contact the fortune teller'
+        }
+      console.log('password correct');
       return done(null, user)
     }
+  }
     return done(null, false) 
   }
-))
+));
 
 app.use(express.urlencoded({ extended: true }))
 app.use(passport.initialize()) 
